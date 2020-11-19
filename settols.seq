@@ -1,0 +1,252 @@
+!Sequence file to set reasonable starting points for a tolerance run
+!Some Constants
+^pi == 4*atanf(1)
+^ref== (REF);
+^lambdaMM == (wl w^ref)/1e6 !Reference wavelength in mm
+
+
+!Delete all tolerances and compensators:
+Del tol sa all 
+del cmp sa all
+
+!Now enter all needed tolerances and compensators...
+
+!Do Radius tolerances
+for ^s 1 (num s)-1
+  if (dum s^s)= 0
+    !Is not a dummy surface
+    ^fractionalDr == 0.001 !0.003, 0.001, 0.0005
+    ^FringeVal == 1 !3, 1, 0.5
+    !Calculate Fringe tolerance equivalent to the dR tolerance
+    ^h==(mav s^s)!MAV is the max aperture radius for this surface over all zooms
+    ^equivFringes == ^h**2*(cuy s^s)*^fractionalDr/^lambdaMM
+    ^fringeTolValue==maxf(^equivFringes,^FringeVal) !find the worse of the two
+    DLF s^s ^fringeTolValue
+  end if
+end for !^s
+
+!Do Irregularity tolerances
+^IRRval == 1 !3, 1, 0.5
+!I assume that tighter numbers on the smaller diameters are reasonable
+IRR S'e1s1' 3
+IRR S'e1s2' 3
+IRR S'e2s1' 2
+IRR S'e2s2' 2
+IRR S'e3s1' 2
+IRR S'e3s2' 2
+IRR S'e4s1' 2
+IRR S'e4s2' 3
+IRR S'e5s1' 3
+IRR S'e5s2' 2
+IRR S'e6s1' 1
+IRR S'e6s2' 1
+IRR S'e7s1' 1
+IRR S'e7s2' 2
+IRR S'e8s1' 2
+IRR S'e8s2' 1
+IRR S'e9s1' 1
+IRR S'e9s2' 2 !Cemented surfaces can be looser
+IRR S'e10s1' 2 !Cemented surfaces can be looser
+IRR S'e10s2' 1
+IRR S'e11s1' 1
+IRR S'e11s2' 2 !Cemented surfaces can be looser
+IRR S'e12s1' 2 !Cemented surfaces can be looser
+IRR S'e12s2' 1
+
+!Do glass thicknesses (coupled to neighboring airspace)
+!Note that doublets require 2 thicknesses coupled to the same airspace
+^thiVal == 0.050 !(0.100, 0.050, 0.025)
+
+DLT S'e1s1'-1 C -^thiVal !Coupled airspace, with negative tolerance value
+DLT S'e1s1' ^thiVal      !Tolerance on glass
+ 
+DLT S'e2s1'-1 C -^thiVal !Coupled airspace, with negative tolerance value
+DLT S'e2s1' ^thiVal 
+
+DLT S'e3s1'-1 C -^thiVal !Coupled airspace, with negative tolerance value
+DLT S'e3s1' ^thiVal 
+
+!Doublets require that one airspace gets coupled to 2 elements
+!This requires using different lable groups
+DLT S'e5s1'+1 C -^thiVal 	!Airspace tolerance coupled to glass element, with negative tolerance value
+DLT S'e4s1' ^thiVal 		!Tolerance on the glass element
+DLT S'e5s1'+1 L'sym' C -^thiVal !Same airspace, new label, coupled to other element; use label of 'sym'
+DLT S'e5s1' L'sym' ^thiVal !Thickness tolerance on second glass element.
+
+DLT S'e6s1'+1 C -^thiVal 
+DLT S'e6s1' ^thiVal 
+
+DLT S'e8s1'+1 C -^thiVal !Airspace tolerance coupled to glass element, with negative tolerance value
+DLT S'e7s1' ^thiVal 		!Tolerance on the glass element
+DLT S'e8s1'+1 L'sym' C -^thiVal !Same airspace, new label, coupled to other element; use label of 'sym'
+DLT S'e8s1' L'sym' ^thiVal !Thickness tolerance on second glass element.
+
+
+DLT S'e10s1'+1 C -^thiVal !Airspace tolerance coupled to glass element, with negative tolerance value
+DLT S'e9s1' ^thiVal 		!Tolerance on the glass element
+DLT S'e10s1'+1 L'sym' C -^thiVal !Same airspace, new label, coupled to other element; use label of 'sym'
+DLT S'e10s1' L'sym' ^thiVal !Thickness tolerance on second glass element.
+
+
+DLT S'e12s1'+1 C -^thiVal !Airspace tolerance coupled to glass element, with negative tolerance value
+DLT S'e11s1' ^thiVal 		!Tolerance on the glass element
+DLT S'e12s1'+1 L'sym' C -^thiVal !Same airspace, new label, coupled to other element; use label of 'sym'
+DLT S'e12s1' L'sym' ^thiVal !Thickness tolerance on second glass element.
+
+
+!Do airspaces (lens positions)
+^dlzVal == 0.025 !(0.050, 0.025, 0.0125)
+DSZ S'e1s1'..'e1s2'   ^dlzVal
+DSZ S'e2s1'..'e2s2'   ^dlzVal
+DSZ S'e3s1'..'e3s2'   ^dlzVal
+DSZ S'e4s1'..'e4s2'   ^dlzVal
+DSZ S'e5s1'..'e5s2'   ^dlzVal
+DSZ S'e6s1'..'e6s2'   ^dlzVal
+DSZ S'e7s1'..'e7s2'   ^dlzVal
+DSZ S'e8s1'..'e8s2'   ^dlzVal
+DSZ S'e9s1'..'e9s2'   ^dlzVal
+DSZ S'e10s1'..'e10s2' ^dlzVal
+DSZ S'e11s1'..'e11s2' ^dlzVal
+DSZ S'e12s1'..'e12s2' ^dlzVal
+
+!Index tolerances
+^indVal == 0.0005 !(0.001, 0.0005, 0.0003, 0.0002, 0.0001) !Categories from SCHOTT
+DLN S'e1s1'  ^indVal 
+DLN S'e2s1'  ^indVal 
+DLN S'e3s1'  ^indVal 
+DLN S'e4s1'  ^indVal 
+DLN S'e5s1'  ^indVal 
+DLN S'e6s1'  ^indVal 
+DLN S'e7s1'  ^indVal 
+DLN S'e8s1'  ^indVal 
+DLN S'e9s1'  ^indVal 
+DLN S'e10s1' ^indVal 
+DLN S'e11s1' ^indVal 
+DLN S'e12s1' ^indVal 
+
+!Abbe tolerances
+^abbeVal == 0.005 !(0.008, 0.005, 0.003, 0.002, 0.001) !Categories from SCHOTT
+DLV S'e1s1'  ^abbeVal  
+DLV S'e2s1'  ^abbeVal  
+DLV S'e3s1'  ^abbeVal  
+DLV S'e4s1'  ^abbeVal  
+DLV S'e5s1'  ^abbeVal  
+DLV S'e6s1'  ^abbeVal  
+DLV S'e7s1'  ^abbeVal  
+DLV S'e8s1'  ^abbeVal  
+DLV S'e9s1'  ^abbeVal  
+DLV S'e10s1' ^abbeVal  
+DLV S'e11s1' ^abbeVal  
+DLV S'e12s1' ^abbeVal 
+
+!Do Wedge tolerances
+^TIRval == 0.010 !(0.025, 0.010, 0.005)
+TIR S'e1s1' ^TIRval
+TIR S'e2s1' ^TIRval
+TIR S'e3s1' ^TIRval
+TIR S'e4s2' ^TIRval
+TIR S'e5s2' ^TIRval
+TIR S'e6s2' ^TIRval
+TIR S'e7s2' ^TIRval
+TIR S'e8s2' ^TIRval
+TIR S'e9s2' ^TIRval
+TIR S'e10s2' ^TIRval
+TIR S'e11s2' ^TIRval
+TIR S'e12s2' ^TIRval
+
+!Do tilt tolerances
+^TILTval == 0.015 !(0.025, 0.015, 0.010)
+BTI S'e1s1'..'e1s2' R ^TILTval/(2*(SD S'e1s2'))
+BTI S'e2s1'..'e2s2' R ^TILTval/(2*(SD S'e2s2'))
+BTI S'e3s1'..'e3s2' R ^TILTval/(2*(SD S'e3s2'))
+BTI S'e4s1'..'e5s2'   ^TILTval/(2*(SD S'e4s1')) !doublet
+BTI S'e6s1'..'e6s2'   ^TILTval/(2*(SD S'e6s1'))
+BTI S'e7s1'..'e8s2'   ^TILTval/(2*(SD S'e7s1')) !doublet
+BTI S'e9s1'..'e10s2'  ^TILTval/(2*(SD S'e9s1')) !doublet
+BTI S'e11s1'..'e12s2'  ^TILTval/(2*(SD S'e11s1')) !doublet
+
+!Additional tilts for concave seats on elements 1,2,3,4,10
+^addTilt == 0.010 !(0.015, 0.010, 0.005)
+BTI S'e1s1'..'e1s2' R L'as2' ^addTilt/(2*(SD S'e1s2'))
+BTI S'e2s1'..'e2s2' R L'as2' ^addTilt/(2*(SD S'e2s2'))
+BTI S'e3s1'..'e3s2' R L'as2' ^addTilt/(2*(SD S'e3s2'))
+BTI S'e4s1'..'e5s2'   L'as2' ^addTilt/(2*(SD S'e4s1')) !doublet
+BTI S'e9s1'..'e10s2'  L'as2'  ^addTilt/(2*(SD S'e9s1')) !doublet
+
+
+!Do Decenter from nominal overage
+^overVal == 0.025 !(0.050, 0.025, 0.012)
+DIS S'e1s1'..'e1s2' ^overVal 
+DIS S'e2s1'..'e2s2' ^overVal 
+DIS S'e3s1'..'e3s2' ^overVal 
+DIS S'e4s1'..'e5s2' ^overVal !doublet
+DIS S'e6s1'..'e6s2' ^overVal 
+DIS S'e7s1'..'e8s2' ^overVal !doublet
+DIS S'e9s1'..'e10s2' ^overVal !doublet
+DIS S'e11s1'..'e12s2' ^overVal !doublet
+
+!Do Decenter from OD tolerance on lens
+^overVal == 0.025 !(0.050, 0.025, 0.012)
+DIS S'e1s1'..'e1s2' L'as2' ^overVal 
+DIS S'e2s1'..'e2s2' L'as2' ^overVal 
+DIS S'e3s1'..'e3s2' L'as2' ^overVal 
+DIS S'e4s1'..'e5s2' L'as2' ^overVal !doublet
+DIS S'e6s1'..'e6s2' L'as2' ^overVal 
+DIS S'e7s1'..'e8s2' L'as2' ^overVal !doublet
+DIS S'e9s1'..'e10s2' L'as2' ^overVal !doublet
+DIS S'e11s1'..'e12s2' L'as2' ^overVal !doublet
+
+
+!Do Decenter from ID Tolerance on housing
+^overVal == 0.015  !(0.025, 0.015, 0.010)
+DIS S'e1s1'..'e1s2' L'as3' ^overVal 
+DIS S'e2s1'..'e2s2' L'as3' ^overVal 
+DIS S'e3s1'..'e3s2' L'as3' ^overVal 
+DIS S'e4s1'..'e5s2' L'as3' ^overVal !doublet
+DIS S'e6s1'..'e6s2' L'as3' ^overVal 
+DIS S'e7s1'..'e8s2' L'as3' ^overVal !doublet
+DIS S'e9s1'..'e10s2' L'as3' ^overVal !doublet
+DIS S'e11s1'..'e12s2' L'as3' ^overVal !doublet
+
+!Do Group tolerances
+!Lathe set-up error between elements 1-3 and 4-6:
+  !Assume 0.010 of decenter and 0.010 over the diameter of E6
+  DIS S'e1s1'..'e3s2' 0.010
+  BTI S'e1s1'..'e3s2' R 0.010/(2*(sd s'e6s1'))
+!Flange error at joint in housing
+  !Assume 0.010 of decenter and 0.010 over the diameter of E6
+  DIS S'e7s1'..'e12s2' 0.010
+  BTI S'e7s1'..'e12s2' 0.010/(2*(sd s'e6s1'))
+
+!Compensators
+!focus
+cmp dlt si-1 5
+cmp dlt L'sym' si-1 5
+
+!cmp dla si 0.010
+!cmp dlb si 0.010
+!cmp dla L'as2' si 0.010
+!cmp dlb L'as2' si 0.010
+!cmp dla L'as3' si 0.010
+!cmp dlb L'as3' si 0.010
+
+
+!cmp dsz s'e11s1'..'e12s2' 1
+!cmp dsz L'sym' s'e11s1'..'e12s2' 1
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+

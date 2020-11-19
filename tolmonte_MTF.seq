@@ -1,0 +1,707 @@
+!**************************************************************************
+!       Macro TOLMONTE_MTF
+!Same as Tolmonte but has the sign of ^Degradation switched.
+!       Tolerances a lens based on an image quality criterion which can be
+!       determined by the user.  It runs Monte Carlo analysis on a lens
+!       with the following assumptions and restrictions:
+!       1.  No inverse sensitivity; SNS mode only.
+!       2.  For RMS wavefront error, MTF, and other metrics supported by
+!           TOR, the computation will be much faster using TOR.
+!       3.  The tolerance list is entered in the same way as for TOR,
+!           however, HOM, AXG, RAG, ZRN, ZFR, QCN, and QBF tolerances are ignored.
+!           Non-zero X & Y offsets for surface tolerances are ignored.
+!       4.  User-defined tolerances may be added by modifying macro UTOLCHNG.
+!       5.  Compensation is done via macro (typically using AUTO)
+!           Thus, the user should define AUTO variables to act as compensators. 
+!           CMP definitions are ignored.
+!       6.  The user must supply a macro to calculate the image quality
+!           values unless one of the pre-defined macros is used.
+!       7.  Solves are taken account of.
+!       8.  Through-focus (FFO, IFO, NFO) cannot be used.
+!       9.  Distortion sensitivities are not available.
+!
+!       Usage:
+!               in TOLMONTE lens_name [perf_seq [comp_seq [num_trials [output_options]]]]
+!
+!               1. lens_name is the lens file saved with tolerances.
+!                  Default is lens.
+!
+!               2. perf_seq is the name of the macro to calculate the performance data
+!                  Default is TOLSPOT.
+!
+!               3. comp_seq is the name of the compensation macro.
+!                  Default is TOLCOMP.
+!
+!               4. num_trials is the number of Monte Carlo samples to be run.
+!                  Default is 50.
+!
+!               5. output_options controls the listing and plotting.  They are
+!                  Yes|No codes; use Y or N (upper or lower case).  Any character,
+!                  including a blank character, that is not the opposite of the
+!                  default is considered the default.  Enter as a quoted string.
+!                  1st character    Summary list of tolerances at end (Y)
+!                  2nd character    Plot probability distribution (Y)
+!                  3rd character    Plot each zoom position separately (N)
+!                  4th character    Write error function and nominal for each sample (N)
+!                  5th character    Write lens sequence for each sample (N)
+!                  6th character    Trace references rays for each sample and report (N)
+!                  7th character    Accumulate samples to current data (N)
+!                  8th character    Optimize the nominal system (Y)
+!                  9th character    Uniform probability distribution for 2D Decenters (N)
+!                                   Default is a truncated Gaussian distribution, the 
+!                                   same default as in TOR
+!                             
+!                  Default is "YYNNNNNYN".
+!
+!               6. Fields 6-9 are the parameters need for perf_seq.
+!
+! Author:     M. Rimmer     Date: 03-28-00
+!
+! History:      
+!  02/20/01 - MPR - Make sure pth seq cv_macro: is on
+!  11/15/01 - MPR - Allow accumulation; plot actual distribution
+!  12/07/01 - MPR - Use first available buffer instead of 9998
+!  04/18/05 - MPR - Modified to use new form of TSF CHA for 2D tolerances
+!  07/30/05 - DH  - Added selection for probability distribution choice
+!                   Included B. Whiteside's fix for the WRL of lenses
+!                   Modified header notes
+!  05/10/10 - WS  - Skip inactive zooms (fix bug # = 44916)
+!  03/25/14 - JW  - New default to plot line segments since tolplot.seq now plots each trial data point (no bins)
+!  02/10/15 - DH  - Added explict variable declarations for all variables used by this macro
+!  04/27/17 - DH  - Modified several (pos z^z) tests to allow users to define ^z_limit > (num z)
+!                   Additional variable initialization
+!                   Added test for # trials > 1
+!                   Changed Errors and Warnings to use CVERROR and CVWARNING functions
+!                   Added global variable for trial # (to allow numbered INT files via UTOLCHNG)
+!                   Reset OUT N & VER N after calls to user-specified sequences
+!***************************************************************************
+
+rfd lens tolspot tolcomp 50 YYNNNNNYN
+
+!  Global variables
+gbl num ^imagqual(99,50)      ! image quality value (z,f)
+gbl num ^z_limit              ! limit on zoom loop
+gbl num ^f_limit              ! limit on field loop
+gbl str ^description          ! description of performance
+gbl num ^error                ! error flag for image evaluation
+gbl num ^degradation          ! sign of degradation
+gbl str ^format               ! format of image quality variable
+gbl str ^z_label              ! Label of zoom loop
+gbl str ^f_label              ! Label of field loop
+gbl str ^z_name(99)           ! Name of zoom values
+gbl str ^f_name(50)           ! Name of field values
+gbl num ^numutols             ! Number of user-defined tolerances
+gbl num ^tol_value            ! Value of current tolerance
+gbl str ^tol_name             ! Name of current tolerance
+gbl num ^zposition(99)        ! For ^z_limit <> (num z), always 1. Otherwise, same as (POS z^z))
+gbl num ^MC_trial_number      ! Number of the current Monte Carlo trial
+
+!  Local variables
+lcl num ^cumprob(4)                             
+lcl num ^buf1                               
+lcl num ^col                                
+lcl num ^column                                             
+lcl num ^f                              
+lcl num ^first_row                              
+lcl num ^i                              
+lcl num ^k                              
+lcl num ^kn                             
+lcl num ^last_row                                               
+lcl num ^max_errf                               
+lcl num ^mean                               
+lcl num ^min_errf
+lcl num ^msg                                
+lcl num ^n                              
+lcl num ^nominal                                
+lcl num ^num_samples                                
+lcl num ^num_variables                              
+lcl num ^numsamples                             
+lcl num ^numtols                                
+lcl num ^old_samples                                                                
+lcl num ^row                                
+lcl num ^sigma                                                              
+lcl num ^sump                               
+lcl num ^sump2                              
+lcl num ^temp                               
+lcl num ^total_samples                                                              
+lcl num ^z
+                                
+lcl str ^accumulate                             
+lcl str ^check_rays                                                             
+lcl str ^field                              
+lcl str ^flabel                             
+lcl str ^format1                                
+lcl str ^lensname                               
+lcl str ^list_errf                              
+lcl str ^list_tol         ! List tolerances                  
+lcl str ^optimize_nom                               
+lcl str ^options                                                            
+lcl str ^plot_prob        ! Plot probability distributions               
+lcl str ^plot_zoom        ! Plot probability distributions separately for each zoom
+lcl str ^ray_type                               
+lcl str ^surface                                
+lcl str ^trial                              
+lcl str ^uniform_prob                   
+lcl str ^wrl_lens                               
+lcl str ^zlabel                             
+lcl str ^zoom                   
+
+out n
+ver n
+res #1
+
+^debug == 1  !Controls OUT and VER
+
+^numsamples == #4
+^numsamples == absf(roundf(^numsamples))
+if ^numsamples < 2
+  out y
+  wri
+  ^msg == CVWARNING("Number of Trials must be 2 or greater",0)
+  wri
+  ver y
+  rtn
+end if
+
+^options == upcase(rfstr(5))
+^options == substr(concat(^options,"       "),1,9)
+
+!
+!  Check and issue standard TOLMONTE/TOLFDIF warnings
+!
+in CV_MACRO:tolwarning
+out n
+
+^error == 0             ! Initialize error flag
+^description == ""      ! Initialize description
+^degradation == -1       ! Initialize sign of degradation
+^format == "8d.3d"      ! Initialize format
+^MC_trial_number == 0   ! Initialize Trial Number
+
+! Initialize ^cumprob(4)
+for ^i 1 4
+  ^cumprob(^i) == 0
+end for
+
+! Initialize ^zposition(99)
+for ^i 1 99
+  ^zposition(^i) == 1
+end for
+
+!       Set up output options
+^list_tol == substr(^options,1,1)
+if ^list_tol <> "N"
+  ^list_tol == "Y"
+end if
+^plot_prob == substr(^options,2,1)
+if ^plot_prob <> "N" AND ^plot_prob <> "P" AND ^plot_prob <> "S"
+  ^plot_prob == "Y"
+end if
+^plot_zoom == substr(^options,3,1)
+if ^plot_zoom <> "Y"
+  ^plot_zoom == "N"
+end if
+^list_errf == substr(^options,4,1)
+if ^list_errf <> "Y"
+  ^list_errf == "N"
+end if
+^wrl_lens ==  substr(^options,5,1)
+if ^wrl_lens <> "Y"
+  ^wrl_lens == "N"
+end if
+^check_rays == substr(^options,6,1)
+if ^check_rays <> "Y"
+  ^check_rays == "N"
+end if
+^accumulate == substr(^options,7,1)
+if ^accumulate <> "Y"
+  ^accumulate == "N"
+end if
+^optimize_nom == substr(^options,8,1)
+if ^optimize_nom <> "N"
+  ^optimize_nom == "Y"
+end if
+^uniform_prob == substr(^options,9,1)
+if ^uniform_prob <> "Y"
+  ^uniform_prob == "N"
+end if
+
+
+!   Make sure pth seq cv_macro: is on
+pth seq y
+pth seq del cv_macro:
+pth seq app cv_macro:
+
+!   Find first available buffer
+^buf1 == 1
+while NOT (buf.emp b^buf1)
+  ^buf1 == ^buf1 + 1
+end while
+
+!   Restore nominal lens
+res #1
+
+^z_limit == (num z)
+^f_limit == (num f)
+
+!out y
+!eva (num z)
+!!eva ^z_limit
+!eva (num f)
+!eva ^f_limit
+!eva sqrtf(-1)
+
+
+^z_label == " Zoom"
+^f_label == "Field"
+for ^f 1 50
+  ^f_name(^f) == substr(concat("  ",num_to_str(^f)),1,10)
+end  for
+for ^z 1 99
+  ^z_name(^z) == substr(concat("  ",num_to_str(^z)),1,10)
+end  for
+
+!   If accumulating, check for valid buffer and correct
+!   zoom and field limits
+if ^accumulate = "Y"
+   !eva ^accumulate 
+   !eva sqrtf(-1)
+  ^lensname == substr((fil),1,locstr((fil),".")-1)
+  buf imp b^buf1 ^lensname
+  if (buf.emp b^buf1) = 1
+    out y
+    wri 
+    ^msg == CVERROR("Buffer not available",0)
+    wri
+    ver y
+    rtn
+  else if ^z_limit <> (buf.num b^buf1 i2 j1) OR ^f_limit <> (buf.num b^buf1 i3 j1)
+    out y
+    wri 
+    ^msg == CVERROR("Zoom or field limits do not match values in buffer",0)
+    ver y
+    rtn
+  end if
+end if
+
+!out y
+!eva ^z_limit
+!eva sqrtf(-1)
+
+!       Get number of  user-defined tolerances
+in utolchng
+out n
+ver n
+
+!       Get number of tolerances
+^kn == (NUM TOL)
+^numtols == ^kn + ^numutols
+if ^numtols = 0
+  out y
+  wri 
+  ^msg == CVERROR("No tolerances are defined.",0)
+  ver y
+  rtn
+end if
+
+!   Get number of variables for compensation
+buf y
+aut;mxc 0;vli;go
+buf n
+buf sep
+buf fnd b0 "VARIABLE LIST"
+out y
+wri
+if (buf.fnd) = 0 
+   ^msg == CVWARNING(" No AUTO variables defined for compensation",0)
+   ^num_variables == 0
+els
+   ^first_row == (buf.i b0)+3
+   buf fnd b0 "* Multiple entries"
+   ^last_row == (buf.i b0)-2
+   wri "       AUTO variables used for compensation"
+   buf lis b0 NOL i^first_row..^last_row
+   ^num_variables == ^last_row - ^first_row + 1
+end if
+wri
+wri
+out y !n DEBUG
+buf del b0
+
+!   Get nominal value of merit function
+!   Optimize with respect to compensators
+if ^num_variables AND ^optimize_nom = "Y"
+  in #3
+  if ^debug = 0;out n;els;out y;end if
+  if ^debug = 0;ver n;els;ver y;end if
+end if
+
+!   Evaluate the merit function
+^error == 0
+in #2 #6 #7 #8 #9 ! Evaluate image quality
+if ^debug = 0;out n;els;out y;end if
+if ^debug = 0;ver n;els;ver y;end if
+
+if ^error <> 0          ! Check for error
+  ^string == concat("Error in evaluating",^description)
+  out y
+  wri 
+  ^msg == CVERROR(^string,0)
+  ver y
+  rtn
+end if
+
+! Determine Zoom Position status
+! (POS) status is only considered if z_limit = (num z) 
+for ^z 1 ^z_limit
+  if ^z_limit = (num z)
+    ^zposition(^z)  == (pos z^z)
+  end if
+end for
+
+!   List nominal values
+^format1 == CONCAT("                     '10c' '10c'    '", ^format)
+^format1 == CONCAT(^format1, "'")
+if ^z_limit = 1
+   ^zlabel == "          "
+els
+   ^zlabel == substr(concat(^z_label,"          "),1,10)
+end if
+^flabel == substr(concat(^f_label,"          "),1,10)
+out y
+wri
+wri "                    " ^zlabel ^flabel "   NOMINAL VALUE OF"
+wri "                                             " ^description
+for ^z 1 ^z_limit
+  if ^zposition(^z)
+    ^zoom == ^z_name(^z)
+    if ^z_limit = 1
+      ^zoom == "  "
+    end if
+    for ^f 1 ^f_limit
+     ^field == substr(concat(^f_name(^f),"          "),1,10)
+      if ^f > 1
+         ^zoom == "  "
+      end if
+      ^zoom == substr(concat(^zoom,"          "),1,10)
+      wri Q^format1 ^zoom ^field ^imagqual(^z,^f)
+    end for
+  end if
+end for
+if ^debug = 0;out n;els;out y;end if
+
+!   List trials if user has requested it
+if ^list_errf = "Y"
+  out y
+  wri
+  wri " Trial" ^zlabel ^flabel "    Value       Difference from nominal"
+  if ^debug = 0;out n;els;out y;end if
+  ^format1 == CONCAT("'6c' '10c' '10c' '", ^format)
+  ^format1 == CONCAT(^format1, "' '")
+  ^format1 == CONCAT(^format1, ^format)
+  ^format1 == CONCAT(^format1, "'")
+end if
+
+!   Use buffer b^buf1 to save nominal value and sums for each zoom and field.
+!   Each row is a different zoom starting at the fourth row.  Every 3 columns is
+!   a different field (nominal plus two sums).  The first three rows are used
+!   for related descriptive information.
+if ^accumulate = "N"
+  buf del b^buf1
+  buf mov b^buf1
+  buf put b^buf1 i1 j1..3 ^description ^format ^degradation
+  buf put b^buf1 i2 j1..2 ^z_limit ^z_label
+  buf put b^buf1 i3 j1..2 ^f_limit ^f_label
+  for ^z 1 ^z_limit
+     if ^zposition(^z)
+       buf put b^buf1 i2 j^z+2 ^z_name(^z)
+     end if
+  end for
+  for ^f 1 ^f_limit
+    buf put b^buf1 i3 j^f+2 ^f_name(^f)
+  end for
+  for ^z 1 ^z_limit
+     if ^zposition(^z)
+       for ^f 1 ^f_limit
+        for ^i 1 3
+         ^column == 3*(^f-1) + ^i
+         if ^i = 1
+          buf put b^buf1 i^z+3 j^column ^imagqual(^z,^f)
+         else
+          buf put b^buf1 i^z+3 j^column 0.0
+         end if
+        end for
+       end for
+     end if
+  end for
+  ^old_samples == 0
+else
+ ^old_samples == (buf.num b^buf1 i1 j6)
+!   Convert mean and sigma back to sums
+  for ^z 1 ^z_limit
+     if ^zposition(^z)
+       for ^f 1 ^f_limit
+        ^column == 3*(^f-1)+2
+        ^mean == (buf.num b^buf1 i^z+3 j^column)
+        ^sigma == (buf.num b^buf1 i^z+3 j^column+1)
+        ^sump == ^mean*^old_samples
+        ^sump2 == (^sigma**2+^mean**2)*^old_samples
+        buf put b^buf1 i^z+3 j^column ^sump
+        buf put b^buf1 i^z+3 j^column+1 ^sump2
+       end for
+     end if
+  end for
+end if
+^total_samples == ^old_samples
+
+!   Run Monte Carlo samples
+^num_samples == 0
+for ^i 1 ^numsamples
+  ^MC_trial_number == ^i
+
+!   Change the lens, using random values for all tolerances
+  res #1          ! restore nominal lens
+  
+  if ^uniform_prob = "Y"
+     tsf cha u2d ta 0   ! Uniform Probability distribution for 2D Decenter tolerances
+  else
+     tsf cha g2d ta 0   ! Truncated Gaussian Prob. Dist. for 2D Decenter tolerances
+  end if
+   
+  for ^k ^kn+1 ^numtols
+    in utolchng (^k-^kn) 0
+    if ^debug = 0;out n;els;out y;end if
+    if ^debug = 0;ver n;els;ver y;end if
+  end for
+  
+!    Optimize with respect to compensators
+  if ^num_variables
+    in #3
+    if ^debug = 0;out n;els;out y;end if
+    if ^debug = 0;ver n;els;ver y;end if
+  end if
+
+! WRL the lens if requested
+  if ^wrl_lens = "Y"
+    ^lensname == concat(concat(substr((fil),1,locstr((fil),".")-1),num_to_str(^i)),".seq") 
+    wrl ^lensname
+  end if
+
+!   Check reference rays in lens if requested and report
+  if ^check_rays = "Y"
+    if ^debug = 0;out n;els;out y;end if
+    for ^z 1 (num z)
+      if ^zposition(^z)
+        for ^f 1 ^f_limit
+          for ^n 1 5
+            rsi z^z f^f r^n
+            if (rer) <> 0
+              if (rer) > 0
+                ^ray_type == "Reference"
+              else if (rer) < 0
+                ^ray_type == "Chief"
+              end if
+              ^trial == concat("      ",num_to_str(^i))
+              ^trial == substr(^trial,lenstr(^trial)-5,6)
+              ^surface == num_to_str(absf((rer)))
+              out y
+              if ^list_errf = "Y"
+                wri ^trial "          " ^ray_type "ray failure on surface" ^surface
+              else
+                wri " Trial" ^trial "skipped -" ^ray_type "ray failure on surface" ^surface
+              end if
+              if ^debug = 0;out n;els;out y;end if
+              goto next_trial
+            end if
+          end for
+        end for
+      end if
+    end for
+  end if
+
+!   Evaluate the merit function
+  ^error == 0
+  in #2 #6 #7 #8 #9 ! Evaluate image quality
+  if ^debug = 0;out n;els;out y;end if
+  if ^debug = 0;ver n;els;ver y;end if
+  
+  if ^error <> 0          ! Check for error
+     ^trial == concat("      ",num_to_str(^i))
+     ^trial == substr(^trial,lenstr(^trial)-5,6)
+     out y
+     if ^list_errf = "Y"
+       wri Q"'6c'         Error function evaluation failed"  ^trial 
+     else
+       wri Q" Trial '6c' skipped - error function evaluation failed" ^trial
+     end if
+     if ^debug = 0;out n;els;out y;end if
+     goto next_trial
+  end if
+
+!   List trials if user has requested it
+  if ^list_errf = "Y"
+    out y
+    for ^z 1 ^z_limit
+      if ^zposition(^z)
+          ^zoom == ^z_name(^z)
+          if ^z_limit = 1
+            ^zoom == "  "
+          end if
+          for ^f 1 ^f_limit
+             ^field == substr(concat(^f_name(^f),"          "),1,10)
+              if ^f > 1
+                 ^zoom == "  "
+              end if
+              ^zoom == substr(concat(^zoom,"          "),1,10)
+              if ^z > 1 OR ^f > 1
+                ^trial == "      "
+              else
+                ^trial == concat("      ",num_to_str(^i))
+                ^trial == substr(^trial,lenstr(^trial)-5,6)
+              end if
+              ^column == 3*(^f-1) + 1
+              wri Q^format1 ^trial ^zoom ^field ^imagqual(^z,^f) (^imagqual(^z,^f)-(buf.num b^buf1 i^z+3 j^column))
+          end for
+      end if
+    end for
+    if ^debug = 0;out n;els;out y;end if
+  end if
+
+  ^num_samples == ^num_samples + 1
+  ^total_samples == ^total_samples + 1
+  
+  for ^z 1 ^z_limit
+     if ^zposition(^z)
+     
+       ^row == 3+^z_limit*^total_samples+^z    
+       for ^f 1 ^f_limit
+     
+       ^column == 3*(^f-1)+2
+       ^sump == ^imagqual(^z,^f) - (buf.num b^buf1 i^z+3 j^column-1)
+        buf put b^buf1 i^z+3 j^column ((buf.num b^buf1 i^z+3 j^column) + ^sump)
+        buf put b^buf1 i^z+3 j^column+1 ((buf.num b^buf1 i^z+3 j^column+1) + ^sump**2)
+        buf put b^buf1 i^row j^f ^imagqual(^z,^f)
+     
+       end for
+     end if
+  end for
+
+  lbl next_trial
+end for
+
+!       Restore nominal lens
+res #1
+
+!   Save mean, sigma and limits based on mean and sigma
+^max_errf == -1e10
+^min_errf == 1e10
+for ^z 1 ^z_limit
+  if ^zposition(^z)
+     for ^f 1 ^f_limit  
+        ^column == 3*(^f-1)+2
+        ^nominal == (buf.num b^buf1 i^z+3 j^column-1)
+        ^sump == (buf.num b^buf1 i^z+3 j^column)
+        ^sump2 == (buf.num b^buf1 i^z+3 j^column+1)
+      
+        ^mean == ^sump/^total_samples
+        ^sigma == sqrtf(^sump2/^total_samples - ^mean**2)
+      
+      ! Save mean and sigma in buffer
+        buf put b^buf1 i^z+3 j^column ^mean
+        buf put b^buf1 i^z+3 j^column+1 ^sigma
+      
+        ^temp == ^nominal + ^cumprob(4)
+        if ^temp > ^max_errf
+          ^max_errf == ^temp
+        end if
+        if ^temp < ^min_errf
+          ^min_errf == ^temp
+        end if
+        ^temp == 2*(^mean + ^nominal) - ^temp
+        if ^temp > ^max_errf
+           ^max_errf == ^temp
+        end if
+        if ^temp < ^min_errf
+           ^min_errf == ^temp
+        end if  
+     end for
+  end if
+end for
+buf put b^buf1 i1 j4 ^max_errf
+buf put b^buf1 i1 j5 ^min_errf
+buf put b^buf1 i1 j6 ^total_samples
+
+! Plot probability distribution
+^options == substr(concat(concat(^plot_zoom,"N"),^plot_prob),1,3)
+in tolplot ^options ^buf1
+if ^debug = 0;ver n;els;ver y;end if
+if ^debug = 0;out n;els;out y;end if
+
+!   List results
+out y
+
+^format1 == CONCAT("    '10c' '10c'  '", ^format)
+^format1 == CONCAT(^format1, "''")
+^format1 == CONCAT(^format1, ^format)
+^format1 == CONCAT(^format1, "''")
+^format1 == CONCAT(^format1, ^format)
+^format1 == CONCAT(^format1, "''")
+^format1 == CONCAT(^format1, ^format)
+^format1 == CONCAT(^format1, "'")
+wri
+wri
+wri "                              Monte-Carlo analysis -" num_to_str(^total_samples) "trials"
+wri
+wri "                                     CUMULATIVE PROBABILITY"
+wri "                                     Change in" ^description
+if ^z_limit = 1
+ ^z_label == "          "
+end if
+^z_label == substr(concat(^z_label,"          "),1,10)
+wri "   " ^z_label ^f_label "           50.0%       84.1%       97.7%       99.9%"
+for ^z 1 ^z_limit
+  if ^zposition(^z)
+    ^zoom == ^z_name(^z)
+    if ^z_limit = 1
+      ^zoom == "  "
+    end if
+    for ^f 1 ^f_limit
+      ^field == substr(concat(^f_name(^f),"          "),1,10)
+      if ^f > 1
+        ^zoom == "  "
+      end if
+      ^zoom == substr(concat(^zoom,"          "),1,10)
+      
+      ^column == 3*(^f-1)+2
+      ^nominal == (buf.num b^buf1 i^z+3 j^column-1)
+      
+      ^row == 3+^z
+      ^col == 3*^f_limit+6*(^f-1)+2
+      for ^k 1 4
+        ^col == ^col + 1
+        ^cumprob(^k) == (buf.num b^buf1 i^row j^col) - ^nominal
+      end for
+      
+      wri Q^format1 ^zoom ^field  ^cumprob(1) ^cumprob(2) ^cumprob(3) ^cumprob(4)
+    
+    end for
+  end if
+end for
+wri " "
+
+!   Tolerance list
+if ^list_tol = "Y"
+  in tollist
+end if
+if ^debug = 0;out n;els;out y;end if
+
+!   Export b^buf1 to a file
+^lensname == substr((fil),1,locstr((fil),".")-1)
+buf exp b^buf1 ^lensname
+buf del b^buf1
+
+ver y
+out y
+
+wri "Data for plotting saved in" concat(^lensname,".dat")
+wri ""

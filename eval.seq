@@ -1,0 +1,34 @@
+gbl num ^output(6)
+!Evaluate the FractWidth for 6 bands
+!^ImagQual is dimensioned (99,50) = (z,f)
+!We'll use Z1..2 and F1..13
+^NRD == 60
+
+
+!!wri "entering eval"
+!zli sa
+!eva(sqrtf(-1))
+
+for ^z 1 (num z)
+  if ^z = 1
+    ^azi == 0
+  els
+    ^azi == 90
+  end if
+  for ^f 1 (num f)
+    ^retval == MTF_1FLD(^z,^f , 60.7, ^azi, ^NRD, ^output, 'DIF', 'SIN')
+    if ^retval>0
+      !Actual result
+      ^ImagQual(^z,^f)== ^retVal
+    els 
+      !Error
+      wri "ERROR form MTF_1FLD"
+      wri "Error =" ^retVal
+      eva ^z
+      eva ^f
+      eva sqrtf(-1)
+    end if
+  end for !^z
+end for !^f
+
+

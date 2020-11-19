@@ -1,0 +1,56 @@
+!Runs TOR after making some adjustments to the system
+
+res UncDoub_1114H !Get a clean copy of the lens
+!del pik sa !Delete any PIKs
+!del sol sa !Delete any solves
+
+in settols !Set the tolerance values
+!NOTA BENE: If you don't set tols, it will assume default (loose) tolerances and run with those.
+
+!Set up Symmetrical Fields
+^maxAng == 30
+^val2 == ^maxAng*0.555
+^val3 == ^maxAng*0.832
+^val4 == ^maxAng
+
+yan 0 ^val2 ^val3 ^val4  0     0     0    -^val2 -^val3 -^val4   0      0      0 
+xan 0  0     0     0    ^val2 ^val3 ^val4   0      0      0    -^val2 -^val3 -^val4
+
+!Add a second "Zoom" position, identical to the first
+!to allow calculation of 0 and 90 MTF
+!Could also do this by doubling the number of fields)
+Zoo 2
+
+!Set vignetting parameters for the second zoom position
+!This assumes that apertures have been set for the system
+set vig
+
+!Run TOR in "Sensitivity" mode
+TOR
+  SNS !Use "sensitivity" mode, i.e., do not automatically adjust tolerances
+  FRE fa 60.7 !The frequency of interest ( = Nyquist for this sensor.)
+  AZI fa Z1 0   !Zoom 1 to handle the 0 degree MTF orientation
+  Azi fa Z2 90  !Zoom 2 to handle the 90 degree MTF orientation
+  WBF SEN B1    !Collect the sensitivity data to Buffer B1
+  CHT TOR_MTF.xml  !Use the TOR_MTF.XML file to control the colors in the plot
+go 
+
+
+
+!Sort the sensitivity buffer B1
+!The important data start about 17 lines down; 
+!Find where the data start:
+buf mov b1 i1 j1
+buf fnd b1 "Criterion"
+^iStart == (buf.i b1)+2 !starting row number in MC buffer
+eva ^iStart
+^iLast == (buf.LST b1)
+
+buf srt b1 i^iStart..^iLast j16 !Sort B1 on column 16, which is the "worse" column
+
+buf lis b1 i^iStart..^iStart+20 !List the top 20 lines of the sorted buffer to the ourput window.
+
+!Export the buffer to a tab-delimited file
+!User needs to be sure this file isn't open already!
+BUF EXP B1 "Sensitivities.xls"
+

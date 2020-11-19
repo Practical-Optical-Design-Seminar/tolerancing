@@ -1,0 +1,52 @@
+aut
+  mxc 55
+  mnc 2
+  stp n
+  imp 0.0001 
+go
+
+  !Perturb the compensators after implementing them.
+  !Use a triangular distribution for the perturbations.
+  !Extend the triangle out to 1.598 x the tolerance
+  !86% of the probility will lie within the tolerance
+  !To get a triangle distribution, use the convolution of 2 rects,
+  !i.e., each rect is 0.799*T in half width 
+  
+
+  !Do DLT Si-1, tol is 0.00625
+  ^tolVal == 0.00625
+  ^xRect1 == (2*0.799*^tolVal)*randf-0.799*^tolVal 
+  ^xRect2 == (2*0.799*^tolVal)*randf-0.799*^tolVal 
+  ^xTriang == ^xRect1+^xRect2
+  tin si-1 ^xTriang
+
+  !Do tilt of image plane; tol is 0.005/36 radians
+  ^tolVal == 0.005/36
+  ^xRect1 == (2*0.799*^tolVal)*randf-0.799*^tolVal 
+  ^xRect2 == (2*0.799*^tolVal)*randf-0.799*^tolVal 
+  ^xTriang == ^xRect1+^xRect2 !in radians
+  ^xTriangDeg == ^xTriang*180/3.141592653589
+  !This represents the MAGNITUDE of the TILT, in degrees.
+  !Get a random orientation
+  ^azim == 2*3.141592653589*randf
+  ADE si (ADE si)+^xTriangDeg*cosf(^azim)
+  BDE si (BDE si)+^xTriangDeg*sinf(^azim)
+
+  !Do DSZ of s'e11s1'..'e12s2'; tol is 0.00625
+  ^tolVal == 0.00625
+  ^xRect1 == (2*0.799*^tolVal)*randf-0.799*^tolVal 
+  ^xRect2 == (2*0.799*^tolVal)*randf-0.799*^tolVal 
+  ^xTriang == ^xRect1+^xRect2 !in radians
+  tin s'e12s2' ^xTriang 
+  tin s'e11s1'-1 -^xTriang 
+
+  !Do Decenter of entire rear group; tol is 0.00625
+  ^tolVal == 0.010
+  ^xRect1 == (2*0.799*^tolVal)*randf-0.799*^tolVal 
+  ^xRect2 == (2*0.799*^tolVal)*randf-0.799*^tolVal 
+  ^xTriang == ^xRect1+^xRect2 
+  !This represents the MAGNITUDE of the decenter.
+  !Get a random orientation
+  ^azim == 2*3.141592653589*randf
+  XDE si (XDE si)+^xTriang*cosf(^azim)
+  YDE si (YDE si)+^xTriang*sinf(^azim)

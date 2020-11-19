@@ -1,0 +1,55 @@
+in UncDoub_1114H
+
+!Set up Symmetrical Fields
+^maxAng == 30
+^val2 == ^maxAng*0.555
+^val3 == ^maxAng*0.832
+^val4 == ^maxAng
+
+yan 0 ^val2 ^val3 ^val4  0     0     0    -^val2 -^val3 -^val4   0      0      0 
+xan 0  0     0     0    ^val2 ^val3 ^val4   0      0      0    -^val2 -^val3 -^val4
+
+!Zoom it to get 0 and 90 MTF
+Zoo 2
+
+
+in setTolsEEE
+
+del pik sa
+buf del ba
+
+frz sa
+thc si-1 0
+adc si 0
+bdc si 0
+
+thc s'e12s2'  -1
+thc s'e10s2' 1
+
+xdc si  -2
+xdc ss  2
+
+ydc si  -3
+ydc ss  3
+
+sav UncDoub_for_TM
+wrl
+lib; pur UncDoub_for_TM.len;pur UncDoub_for_TM.seq; go
+
+^nCases == 500
+!Call the version that had ^degradation set to -1.
+in TOLMONTE_MTF UncDoub_for_TM.len eval.seq comp.seq ^nCases  "YYYNYNNYN"
+
+!                  1st character    Summary list of tolerances at end (Y)
+!                  2nd character    Plot probability distribution (Y)
+!                  3rd character    Plot each zoom position separately (N)
+!                  4th character    Write error function and nominal for each sample (N)
+!                  5th character    Write lens sequence for each sample (N)
+!                  6th character    Trace references rays for each sample and report (N)
+!                  7th character    Accumulate samples to current data (N)
+!                  8th character    Optimize the nominal system (Y)
+!                  9th character    Uniform probability distribution for 2D Decenters (N)
+!                                   Default is a truncated Gaussian distribution, the 
+!                                   same default as in TOR
+
+
